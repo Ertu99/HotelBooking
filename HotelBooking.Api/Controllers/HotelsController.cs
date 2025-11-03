@@ -13,16 +13,20 @@ namespace HotelBooking.Api.Controllers
     public class HotelsController : ControllerBase
     {
         private readonly IHotelService _hotelService;
+        private readonly ILogger<HotelsController> _logger;
 
-        public HotelsController(IHotelService hotelService)
+        public HotelsController(IHotelService hotelService, ILogger<HotelsController> logger)
         {
             _hotelService = hotelService;
+            _logger = logger;
         }
 
         [HttpGet]
         public async Task<IActionResult>GetALl()
         {
+            _logger.LogInformation("GetAll called at {time}", DateTime.UtcNow);
             var hotels = await _hotelService.GetAllAsync();
+            _logger.LogInformation("Returning {count} hotels",hotels.Count);
             return Ok(hotels);
         }
 
@@ -35,8 +39,16 @@ namespace HotelBooking.Api.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
+            _logger.LogInformation("Fetching hotel with id={id}", id);
             var hotel = await _hotelService.GetByIdAsync(id);
-            return hotel is null ? NotFound() : Ok(hotel);
+            
+            if (hotel == null)
+            {
+                _logger.LogWarning("Hotel with id={id} not found", id);
+                return NotFound();
+            }
+            _logger.LogInformation("Hotel with id={id} found",id);
+            return Ok(hotel);
         }
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateHotelDto dto)
