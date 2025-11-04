@@ -14,5 +14,6 @@ namespace HotelBooking.Domain.Entities
         public int Star { get; set; }
 
         public ICollection<Room> Rooms { get; set; } = new List<Room>();
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
     }
 }
