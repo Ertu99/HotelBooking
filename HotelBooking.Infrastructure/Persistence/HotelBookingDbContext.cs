@@ -26,8 +26,8 @@ namespace HotelBooking.Infrastructure.Persistence
                 b.Property(x => x.City).HasMaxLength(100).IsRequired();
                 b.Property(x => x.Star).HasDefaultValue(3);
 
-                b.Property(x => x.RowVersion)
-                .IsRowVersion();
+                //b.Property(x => x.RowVersion)
+                //.IsRowVersion();
                 
             });
 

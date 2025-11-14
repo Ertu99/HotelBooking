@@ -16,22 +16,17 @@ namespace HotelBooking.Infrastructure.Repositories
         private readonly HotelBookingDbContext _context;
         public HotelRepository(HotelBookingDbContext context)
         {
-            context = _context;
+            _context = context;
         }
         public async Task AddAsync(Hotel hotel)
         {
-            _context.Hotels.Add(hotel);
-            await _context.SaveChangesAsync();
+            await _context.Hotels.AddAsync(hotel);
+
         }
 
-        public async Task DeleteAsync(int id)
+        public void Delete(Hotel hotel)
         {
-            var hotel = await _context.Hotels.FindAsync(id);
-            if(hotel != null)
-            {
-                _context.Hotels.Remove(hotel);
-                await _context.SaveChangesAsync();
-            }
+             _context.Hotels.Remove(hotel);
         }
 
         public async Task<List<Hotel>> GetAllAsync()
@@ -52,10 +47,10 @@ namespace HotelBooking.Infrastructure.Repositories
             
         }
 
-        public async Task UpdateAsync(Hotel hotel)
+        public void Update(Hotel hotel)
         {
             _context.Hotels.Update(hotel);
-            await _context.SaveChangesAsync();
+           
         }
     }
 }

@@ -9,9 +9,11 @@ using HotelBooking.Application.Interfaces;
 using HotelBooking.Application.Mappings;
 using HotelBooking.Application.Services;
 using HotelBooking.Application.Validations;
+using HotelBooking.Domain.Interfaces;
 using HotelBooking.Domain.Repositories;
 using HotelBooking.Infrastructure.Persistence;
 using HotelBooking.Infrastructure.Repositories;
+using HotelBooking.Infrastructure.UnitOfWork;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +24,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// JWT Ayarları
+// --------------------------------------------------
+// JWT
+// --------------------------------------------------
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var key = jwtSettings["Key"];
 
@@ -45,7 +49,9 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-
+// --------------------------------------------------
+// Serilog
+// --------------------------------------------------
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File("Logs/log-.txt", rollingInterval: RollingInterval.Day)
@@ -53,22 +59,28 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .CreateLogger();
 
+builder.Host.UseSerilog();
 
+// --------------------------------------------------
+// CORS
+// --------------------------------------------------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            policy.WithOrigins("http://localhost:3000") // React/Angular dev portu
+            policy.WithOrigins("http://localhost:3000")
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
 });
 
-// Add services to the container.
-builder.Host.UseSerilog();
+// --------------------------------------------------
+// Controllers & Swagger
+// --------------------------------------------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
@@ -77,15 +89,14 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1"
     });
 
-    // 🔐 JWT Security tanımı
+    // JWT için
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter 'Bearer' [space] and then your valid token.\n\nExample: Bearer eyJhbGciOiJIUzI1NiIs..."
+        In = ParameterLocation.Header
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -104,21 +115,22 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// --------------------------------------------------
+// Validation
+// --------------------------------------------------
 builder.Services
     .AddFluentValidationAutoValidation()
     .AddFluentValidationClientsideAdapters();
 
 builder.Services.AddValidatorsFromAssemblyContaining<CreateHotelDtoValidator>();
 
+// --------------------------------------------------
+// API Versioning
+// --------------------------------------------------
 builder.Services.AddApiVersioning(options =>
 {
-    // Versiyon belirtilmezse defaultu kullan
     options.AssumeDefaultVersionWhenUnspecified = true;
-
-    // Versiyon bilgisi response header'ına eklensin
     options.ReportApiVersions = true;
-
-    // Versiyon belirleme yöntemleri (query / header / route)
     options.ApiVersionReader = new Microsoft.AspNetCore.Mvc.Versioning.UrlSegmentApiVersionReader();
 });
 
@@ -128,6 +140,9 @@ builder.Services.AddVersionedApiExplorer(options =>
     options.SubstituteApiVersionInUrl = true;
 });
 
+// --------------------------------------------------
+// Hangfire
+// --------------------------------------------------
 builder.Services.AddHangfire(config =>
 {
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -144,51 +159,72 @@ builder.Services.AddHangfire(config =>
               });
 });
 
+builder.Services.AddHangfireServer();
 
-
-
-
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+// --------------------------------------------------
+// OpenAPI
+// --------------------------------------------------
 builder.Services.AddOpenApi();
 
+// --------------------------------------------------
+// DbContext
+// --------------------------------------------------
 var cs = builder.Configuration.GetConnectionString("SqlServer");
 builder.Services.AddDbContext<HotelBookingDbContext>(opt =>
     opt.UseSqlServer(cs));
 
-
-// Servis kayıtları
+// --------------------------------------------------
+// Service Registrations
+// --------------------------------------------------
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IHotelRepository, HotelRepository>();
 builder.Services.AddScoped<IHotelService, HotelService>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 builder.Services.AddHostedService<LogWriterService>();
 
-builder.Services.AddHangfireServer();
-
+// --------------------------------------------------
+// Build
+// --------------------------------------------------
 var app = builder.Build();
 
-app.UseHangfireDashboard("/hangfire");
+// --------------------------------------------------
+// 🔥 MIDDLEWARE ORDER (En önemli kısım)
+// --------------------------------------------------
 
-app.UseCors("AllowFrontend");
-app.UseMiddleware<ExceptionMiddleware>();
+// 1) Custom Auth Middleware (HER ŞEYDEN ÖNCE)
+app.UseMiddleware<AuthMiddleware>();
+
+// 2) Request Logging
 app.UseMiddleware<RequestLoggingMiddleware>();
 
+// 3) CORS
+app.UseCors("AllowFrontend");
 
+// 4) Global Exception Handler
+app.UseMiddleware<ExceptionMiddleware>();
 
-// Configure the HTTP request pipeline.
+// 5) Swagger (dev ortamı)
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.UseSwagger();              // ✅ Swagger middleware
-    app.UseSwaggerUI();            // ✅ Swagger UI
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
+// 6) HTTPS
 app.UseHttpsRedirection();
 
+// 7) Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 8) Routing (Controllers)
 app.MapControllers();
 
+// 9) Hangfire Dashboard (SONDA OLMALI)
+app.UseHangfireDashboard("/hangfire");
+
+// --------------------------------------------------
 app.Run();
