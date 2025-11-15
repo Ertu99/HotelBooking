@@ -228,3 +228,4 @@ app.UseHangfireDashboard("/hangfire");
 
 // --------------------------------------------------
 app.Run();
+public partial class Program { }
